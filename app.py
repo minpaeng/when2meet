@@ -1,7 +1,9 @@
-from telegram import Update, Bot
+from telegram import Update
 from telegram.ext import Updater, CallbackContext
 from telegram.ext import CommandHandler, MessageHandler, Filters
 from DB import queries
+import model
+from main import when_to_meet, One_day
 
 
 def read_token(file_path):
@@ -82,14 +84,18 @@ def done(update: Update, context: CallbackContext) -> None:
         print(res)
 
         # 모델에 대화 넘기고 결과 받아오기
+        res = model_setting("", "")
+        tmp = ""
+        for s in res:
+            # print(s.year)
+            tmp += str(s) + "\n\n"
 
+        res = tmp
         # chat_group과 message 테이블에서 해당 그룹 아이디와 관련된 값 모두 삭제
         queries.delete_from_chat_group(group_id)
 
         update.message.reply_text(reply_to_message_id=msg.message_id,
-                                  text="다함께 만날 수 있는 시간은 아래와 같습니다.\n\n\
-                                    1순위\n2022-03-31-00:00~2022-03-31-24:00\n\n\
-                                    2순위\n2022-03-29-00:00~2022-03-29-24:00")
+                                  text="다함께 만날 수 있는 시간은 아래와 같습니다.\n\n" + res)
 
 
 # start 명령어 호출 후 실행되는 메소드
@@ -99,7 +105,7 @@ def receive_msg(update: Update, context: CallbackContext) -> None:
     _, group_id, user_id, text = chat_info(msg)
     if not queries.find_group_id_from_chat_group(group_id):
         return
-    queries.insert_to_message(group_id=group_id, user_id=user_id, msg= text)
+    queries.insert_to_message(group_id=group_id, user_id=user_id, msg=text)
 
 
 def chat_info(message):
@@ -110,13 +116,73 @@ def chat_info(message):
     return chat_type, group_id, user_id, chat
 
 
+def model_setting(input_sentences, input_person) -> str:
+    inputs = ['우리 언제 만나냐',
+              '담주에 저녁먹을래?',
+              '오오 만나자',
+              'ㅠㅠㅠ 만나줘 제발',
+              'ㅋㅋㅋㅋㅋㅋ다들 바쁜것 같아서ㅜ',
+              '노노 하나도 안바빠',
+              '마침 요즘 할일 없어서 심심했음',
+              '다들 잘지냈냐',
+              '오 오랜만이여',
+              'ㅋㅋㅋㅋㅋㅎㅇㅎㅇ',
+              '나 담주 화수목 저녁에 되는디',
+              '아님 주말 오전에 돼',
+              '난 담주 수요일이랑 토요일 가능해여~',
+              '아 난 주말은 안될듯ㅜㅜ',
+              '뭐 어쩔 수 없제',
+              '난 다음 주 오후에는 다 가능~']
+
+    inputs_person = ['P1',
+                     'P2',
+                     'P3',
+                     'P4',
+                     'P4',
+                     'P1',
+                     'P2',
+                     'P3',
+                     'P2',
+                     'P2',
+                     'P3',
+                     'P3']
+
+    # ner 추출
+    ner = model.ner_model(inputs)
+    ner = model.postprocess_NER(ner)
+    print(len(inputs), len(ner))
+    print(ner)
+
+    # intent 추출
+    intent = model.intent_model(inputs)
+    print(intent)
+
+    dialogue = [{'person': one_person, 'ner': one_ner, 'intent': one_intent} for one_person, one_ner, one_intent in
+                zip(inputs_person, ner, intent)]
+    result = when_to_meet(dialogue)
+
+    print()
+    print("<결과>")
+    result = result.datetimes
+    if result is None:
+        return "다같이 만날 수 있는 시간 존재x"
+    elif result is []:
+        return "모두 만날 수 있음"
+    else:
+        tmp = []
+        for one_datetime in result:
+            tmp.append(One_day(one_datetime))
+        result = tmp
+        result.sort()
+        print(result)
+        return result
+
+
 token = read_token("token.txt")
 updater = Updater(token)
-
 
 updater.dispatcher.add_handler(CommandHandler('start', start))
 updater.dispatcher.add_handler(CommandHandler('done', done))
 updater.dispatcher.add_handler(MessageHandler(Filters.text, receive_msg))
 updater.start_polling()
 updater.idle()
-

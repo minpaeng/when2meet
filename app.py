@@ -81,21 +81,28 @@ def done(update: Update, context: CallbackContext) -> None:
     else:
         # 그룹 아이디에 해당하는 대화를 DB에서 가져옴
         res = queries.select_message_by_grouop_id(group_id)
-        print(res)
+
+        res1, res2 = [], []
+        for x in res:
+            res1.append(x['context'])
+            res2.append(x['user_id'])
+        # print("res1", res1)
+        # print("res2", res2)
 
         # 모델에 대화 넘기고 결과 받아오기
-        res = model_setting("", "")
-        tmp = ""
-        for s in res:
-            # print(s.year)
-            tmp += str(s) + "\n\n"
-
-        res = tmp
+        res = model_setting(res1, res2)
+        if res == "x":
+            update.message.reply_text(reply_to_message_id=msg.message_id,
+                                      text="다함께 만날 수 있는 시간이 없습니다.\n")
+        elif res == "o":
+            update.message.reply_text(reply_to_message_id=msg.message_id,
+                                      text="모두 만날 수 있음.\n")
         # chat_group과 message 테이블에서 해당 그룹 아이디와 관련된 값 모두 삭제
-        queries.delete_from_chat_group(group_id)
+        else:
+            update.message.reply_text(reply_to_message_id=msg.message_id,
+                                      text="다함께 만날 수 있는 시간은 아래와 같습니다.\n\n" + res)
 
-        update.message.reply_text(reply_to_message_id=msg.message_id,
-                                  text="다함께 만날 수 있는 시간은 아래와 같습니다.\n\n" + res)
+        queries.delete_from_chat_group(group_id)
 
 
 # start 명령어 호출 후 실행되는 메소드
@@ -117,35 +124,9 @@ def chat_info(message):
 
 
 def model_setting(input_sentences, input_person) -> str:
-    inputs = ['우리 언제 만나냐',
-              '담주에 저녁먹을래?',
-              '오오 만나자',
-              'ㅠㅠㅠ 만나줘 제발',
-              'ㅋㅋㅋㅋㅋㅋ다들 바쁜것 같아서ㅜ',
-              '노노 하나도 안바빠',
-              '마침 요즘 할일 없어서 심심했음',
-              '다들 잘지냈냐',
-              '오 오랜만이여',
-              'ㅋㅋㅋㅋㅋㅎㅇㅎㅇ',
-              '나 담주 화수목 저녁에 되는디',
-              '아님 주말 오전에 돼',
-              '난 담주 수요일이랑 토요일 가능해여~',
-              '아 난 주말은 안될듯ㅜㅜ',
-              '뭐 어쩔 수 없제',
-              '난 다음 주 오후에는 다 가능~']
+    inputs = input_sentences
 
-    inputs_person = ['P1',
-                     'P2',
-                     'P3',
-                     'P4',
-                     'P4',
-                     'P1',
-                     'P2',
-                     'P3',
-                     'P2',
-                     'P2',
-                     'P3',
-                     'P3']
+    inputs_person = input_person
 
     # ner 추출
     ner = model.ner_model(inputs)
@@ -163,19 +144,28 @@ def model_setting(input_sentences, input_person) -> str:
 
     print()
     print("<결과>")
+
     result = result.datetimes
+    print(result)
     if result is None:
-        return "다같이 만날 수 있는 시간 존재x"
-    elif result is []:
-        return "모두 만날 수 있음"
+        return "x"
+    elif len(result) == 0:
+        return "o"
     else:
-        tmp = []
+        tmp_day = []
         for one_datetime in result:
-            tmp.append(One_day(one_datetime))
-        result = tmp
+            tmp_day.append(One_day(one_datetime))
+        result = tmp_day
+
+        tmp = ""
         result.sort()
         print(result)
-        return result
+        for s in result:
+            # print(s.year)
+            tmp += str(s) + "\n\n"
+
+        res = tmp
+        return res
 
 
 token = read_token("token.txt")

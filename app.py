@@ -3,6 +3,8 @@ from telegram.ext import Updater, CallbackContext
 from telegram.ext import CommandHandler, MessageHandler, Filters
 from DB import queries
 import model
+import definitions
+import datetime as dt
 from main import when_to_meet, One_day
 
 
@@ -22,7 +24,7 @@ def read_token(file_path):
 def start(update: Update, context: CallbackContext) -> None:
     # 1) chat - id(그룹일 때 음수일 수 있음) 조회
     msg = update.message
-    chat_type, group_id, _, _ = chat_info(msg)
+    chat_type, group_id, _, _, _ = chat_info(msg)
 
     # 6) 예외처리: chat_type이 private일 때 어떻게 처리할것인가? 1) 혼자서 대화 진행 가능하도록 2) 둘 이상 단체 채팅에서 사용하라고 경고
     if chat_type == "private":
@@ -58,7 +60,7 @@ def start(update: Update, context: CallbackContext) -> None:
 def done(update: Update, context: CallbackContext) -> None:
     # 1) chat - id(그룹일 때 음수일 수 있음) 조회
     msg = update.message
-    chat_type, group_id, _, _ = chat_info(msg)
+    chat_type, group_id, _, _, _ = chat_info(msg)
 
     # 6) 예외처리: chat_type이 private일 때 어떻게 처리할것인가? 1) 혼자서 대화 진행 가능하도록 2) 둘 이상 단체 채팅에서 사용하라고 경고
     if chat_type == "private":
@@ -90,7 +92,8 @@ def done(update: Update, context: CallbackContext) -> None:
         # print("res2", res2)
 
         # 모델에 대화 넘기고 결과 받아오기
-        res = model_setting(res1, res2)
+        res, date_res, time_res = model_setting(res1, res2, group_id)
+        queries.delete_from_message(group_id)
         if res == "x":
             update.message.reply_text(reply_to_message_id=msg.message_id,
                                       text="다함께 만날 수 있는 시간이 없습니다.\n")
@@ -101,18 +104,23 @@ def done(update: Update, context: CallbackContext) -> None:
         else:
             update.message.reply_text(reply_to_message_id=msg.message_id,
                                       text="다함께 만날 수 있는 시간은 아래와 같습니다.\n\n" + res)
+        # 사용할 도메인 주소
+        url = "http://when2meet.shop:8080/calendar?group_id=" + str(group_id) + "&date=" + date_res + "&time=" + time_res
+        print(url)
+        update.message.reply_text(reply_to_message_id=msg.message_id,
+                                  text="아래 링크에서 보다 자세하게 확인해 보세요.\n" + url)
 
-        queries.delete_from_chat_group(group_id)
+        queries.set_is_start_0(group_id)
 
 
 # start 명령어 호출 후 실행되는 메소드
 # 1) 그룹 아이디, 유저 아이디, 메세지 내용을 받아서 DB에 저장
 def receive_msg(update: Update, context: CallbackContext) -> None:
     msg = update.message
-    _, group_id, user_id, text = chat_info(msg)
+    _, group_id, user_id, text, name = chat_info(msg)
     if not queries.find_group_id_from_chat_group(group_id):
         return
-    queries.insert_to_message(group_id=group_id, user_id=user_id, msg=text)
+    queries.insert_to_message(group_id=group_id, user_id=user_id, msg=text, name=name)
 
 
 def chat_info(message):
@@ -120,10 +128,11 @@ def chat_info(message):
     group_id = message.chat.id
     user_id = message.from_user.id
     chat = message.text
-    return chat_type, group_id, user_id, chat
+    name = message.from_user.first_name
+    return chat_type, group_id, user_id, chat, name
 
 
-def model_setting(input_sentences, input_person) -> str:
+def model_setting(input_sentences, input_person, group_id) -> (str, str, str):
     inputs = input_sentences
 
     inputs_person = input_person
@@ -140,7 +149,38 @@ def model_setting(input_sentences, input_person) -> str:
 
     dialogue = [{'person': one_person, 'ner': one_ner, 'intent': one_intent} for one_person, one_ner, one_intent in
                 zip(inputs_person, ner, intent)]
-    result = when_to_meet(dialogue)
+
+    # result = when_to_meet(dialogue)
+
+    TODAY = dt.datetime.now()
+    result, speakers = when_to_meet(dialogue)
+    # person_ID, one_day
+    # 1.없는 경우 = None -> 아예 리스트에 추가하지 않음
+    # 2.다 되는 경우 = 현재 날짜(TODAY)로 부터 30일간을 다 넣어줌
+    speakers_list = []
+
+    # speakers = {name(person ID): person(When2meet 객체)}
+
+    for name, person in speakers.items():
+        if person.datetimes is None:  # 1.없는 경우 = None -> 아예 리스트에 추가하지 않음
+            pass
+        elif person.datetimes == []:  # 2.다 되는 경우 = 현재 날짜(TODAY)로 부터 30일간을 다 넣어줌
+            person.final_set()
+            for i in range(1, 31):
+                # begin_DT, end_DT, begin_TI, end_TI = one_day
+                t_d = TODAY + dt.timedelta(days=i)
+                all_DT = definitions.Mydate(year=t_d.year, month=t_d.month, day=t_d.day)
+                begin_TI = definitions.Mytime(hour=0)
+                end_TI = definitions.Mytime(hour=24)
+                tmp_one_day = One_day((all_DT, all_DT, begin_TI, end_TI))
+                speakers_list.append({"name": name[1:], "date": tmp_one_day})
+
+        else:  # 3. 해당 날짜만 되는 경우
+            person.final_set()
+            for one_datetime in person.datetimes:
+                speakers_list.append({"name": name[1:], "date": One_day(one_datetime)})
+
+    print("최종 화자들:", speakers_list)
 
     print()
     print("<결과>")
@@ -148,9 +188,9 @@ def model_setting(input_sentences, input_person) -> str:
     result = result.datetimes
     print(result)
     if result is None:
-        return "x"
+        return "x", "", ""
     elif len(result) == 0:
-        return "o"
+        return "o", "", ""
     else:
         tmp_day = []
         for one_datetime in result:
@@ -159,13 +199,23 @@ def model_setting(input_sentences, input_person) -> str:
 
         tmp = ""
         result.sort()
-        print(result)
+        tmp2 = []  # 2022-06-02같은 포멧으로 결과를 배열에 저장하기 위한 리스트 선언
         for s in result:
-            # print(s.year)
+            tmp2.append("{}-{}-{}T{}:{}~{}:{}".format(s.str_year, s.str_month, s.str_day, s.str_begin_hour, s.str_begin_minute, s.str_end_hour, s.str_end_minute))
             tmp += str(s) + "\n\n"
 
+        real_real_tmp = []
+
+        for ss in speakers_list:
+            s = ss['date']
+            real_tmp = dict()
+            real_tmp['name'] = ss['name']
+            real_tmp['date'] = "{}-{}-{}T{}:{}~{}:{}".format(s.str_year, s.str_month, s.str_day, s.str_begin_hour, s.str_begin_minute, s.str_end_hour, s.str_end_minute)
+            real_real_tmp.append(real_tmp)
+
+        date, time = queries.insert_to_appointment(group_id, tmp2, real_real_tmp)
         res = tmp
-        return res
+        return res, date, time
 
 
 token = read_token("token.txt")

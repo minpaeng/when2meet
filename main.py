@@ -1,6 +1,7 @@
 import model
 import definitions
 import datetime as dt
+import copy
 
 
 def when_to_meet(data, today=dt.datetime.now()):
@@ -28,13 +29,17 @@ def when_to_meet(data, today=dt.datetime.now()):
                 elif sent['intent'] == '-':
                     definitions.speakers[sent['person']] - one_sch
 
+    ######
+    tmp_speakers = copy.deepcopy(definitions.speakers)
+
     for idx, speaker in enumerate(definitions.speakers.values()):
         if idx == 0:
             former = speaker
         else:
             former = former.intersection(speaker)
 
-    return former
+    ######
+    return former, tmp_speakers
 
 
 class One_day():
@@ -48,10 +53,43 @@ class One_day():
         self.end_hour = end_TI.hour
         self.end_minute = end_TI.minute
         self.sum = self.year * (10 ** 8) + self.month * (10 ** 6) + self.day * (10 ** 4) + self.begin_hour * (
-                    10 ** 2) + self.begin_minute
+                10 ** 2) + self.begin_minute
+
+        self.str_year = str(self.year)
+        # self.str_year = "0"*(len(self.str_year)-4) + self.str_year
+
+        if self.month < 10:
+            self.str_month = "0" + str(self.month)
+        else:
+            self.str_month = str(self.month)
+
+        if self.day < 10:
+            self.str_day = "0" + str(self.day)
+        else:
+            self.str_day = str(self.day)
+
+        if self.begin_hour < 10:
+            self.str_begin_hour = "0" + str(self.begin_hour)
+        else:
+            self.str_begin_hour = str(self.begin_hour)
+
+        if self.begin_minute < 10:
+            self.str_begin_minute = "0" + str(self.begin_minute)
+        else:
+            self.str_begin_minute = str(self.begin_minute)
+
+        if self.end_hour < 10:
+            self.str_end_hour = "0" + str(self.end_hour)
+        else:
+            self.str_end_hour = str(self.end_hour)
+
+        if self.end_minute < 10:
+            self.str_end_minute = "0" + str(self.end_minute)
+        else:
+            self.str_end_minute = str(self.end_minute)
 
     def __repr__(self):
-        return f'{self.year}년 {self.month}월 {self.day}일 {self.begin_hour}:{self.begin_minute}~{self.end_hour}:{self.end_minute}'
+        return f'{self.str_year}년 {self.str_month}월 {self.str_day}일 {self.str_begin_hour}:{self.str_begin_minute}~{self.str_end_hour}:{self.str_end_minute}'
 
     def __lt__(self, other):
         return self.sum < other.sum
@@ -112,7 +150,36 @@ if __name__ == "__main__":
 
     dialogue = [{'person': one_person, 'ner': one_ner, 'intent': one_intent} for one_person, one_ner, one_intent in
                 zip(inputs_person, ner, intent)]
-    result = when_to_meet(dialogue)
+    ######
+    TODAY = dt.datetime.now()
+    result, speakers = when_to_meet(dialogue)
+    # person_ID, one_day
+    # 1.없는 경우 = None -> 아예 리스트에 추가하지 않음
+    # 2.다 되는 경우 = 현재 날짜(TODAY)로 부터 30일간을 다 넣어줌
+    speakers_list = []
+
+    # speakers = {name(person ID): person(When2meet 객체)}
+
+    for name, person in speakers.items():
+        if person.datetimes is None:  # 1.없는 경우 = None -> 아예 리스트에 추가하지 않음
+            pass
+        elif person.datetimes == []:  # 2.다 되는 경우 = 현재 날짜(TODAY)로 부터 30일간을 다 넣어줌
+            person.final_set()
+            for i in range(1, 31):
+                # begin_DT, end_DT, begin_TI, end_TI = one_day
+                t_d = TODAY + dt.timedelta(days=i)
+                all_DT = definitions.Mydate(year=t_d.year, month=t_d.month, day=t_d.day)
+                begin_TI = definitions.Mytime(hour=0)
+                end_TI = definitions.Mytime(hour=24)
+                tmp_one_day = One_day((all_DT, all_DT, begin_TI, end_TI))
+                speakers_list.append({"name": name[1:], "date": tmp_one_day})
+
+        else:  # 3. 해당 날짜만 되는 경우
+            person.final_set()
+            for one_datetime in person.datetimes:
+                speakers_list.append({"name": name[1:], "date": One_day(one_datetime)})
+
+    print("최종 화자들:", speakers_list)
 
     print()
     print("<결과>")

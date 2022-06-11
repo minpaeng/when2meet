@@ -99,7 +99,7 @@ def done(update: Update, context: CallbackContext) -> None:
                                       text="다함께 만날 수 있는 시간이 없습니다.\n")
         elif res == "o":
             update.message.reply_text(reply_to_message_id=msg.message_id,
-                                      text="모두 만날 수 있음.\n")
+                                      text="모두 만날 수 있어요!\n")
         # chat_group과 message 테이블에서 해당 그룹 아이디와 관련된 값 모두 삭제
         else:
             update.message.reply_text(reply_to_message_id=msg.message_id,
@@ -187,32 +187,38 @@ def model_setting(input_sentences, input_person, group_id) -> (str, str, str):
 
     result = result.datetimes
     print(result)
+
+    tmp_day = []
+    for one_datetime in result:
+        tmp_day.append(One_day(one_datetime))
+    result = tmp_day
+
+    tmp = ""
+    result.sort()
+    tmp2 = []  # 2022-06-02같은 포멧으로 결과를 배열에 저장하기 위한 리스트 선언
+    for s in result:
+        tmp2.append(
+            "{}-{}-{}T{}:{}~{}:{}".format(s.str_year, s.str_month, s.str_day, s.str_begin_hour, s.str_begin_minute,
+                                          s.str_end_hour, s.str_end_minute))
+        tmp += str(s) + "\n\n"
+
+    real_real_tmp = []
+
+    for ss in speakers_list:
+        s = ss['date']
+        real_tmp = dict()
+        real_tmp['name'] = ss['name']
+        real_tmp['date'] = "{}-{}-{}T{}:{}~{}:{}".format(s.str_year, s.str_month, s.str_day, s.str_begin_hour,
+                                                         s.str_begin_minute, s.str_end_hour, s.str_end_minute)
+        real_real_tmp.append(real_tmp)
+
     if result is None:
-        return "x", "", ""
+        date, time = queries.insert_to_appointment(group_id, tmp2, real_real_tmp)
+        return "x", date, time
     elif len(result) == 0:
-        return "o", "", ""
+        date, time = queries.insert_to_appointment(group_id, tmp2, real_real_tmp)
+        return "o", date, time
     else:
-        tmp_day = []
-        for one_datetime in result:
-            tmp_day.append(One_day(one_datetime))
-        result = tmp_day
-
-        tmp = ""
-        result.sort()
-        tmp2 = []  # 2022-06-02같은 포멧으로 결과를 배열에 저장하기 위한 리스트 선언
-        for s in result:
-            tmp2.append("{}-{}-{}T{}:{}~{}:{}".format(s.str_year, s.str_month, s.str_day, s.str_begin_hour, s.str_begin_minute, s.str_end_hour, s.str_end_minute))
-            tmp += str(s) + "\n\n"
-
-        real_real_tmp = []
-
-        for ss in speakers_list:
-            s = ss['date']
-            real_tmp = dict()
-            real_tmp['name'] = ss['name']
-            real_tmp['date'] = "{}-{}-{}T{}:{}~{}:{}".format(s.str_year, s.str_month, s.str_day, s.str_begin_hour, s.str_begin_minute, s.str_end_hour, s.str_end_minute)
-            real_real_tmp.append(real_tmp)
-
         date, time = queries.insert_to_appointment(group_id, tmp2, real_real_tmp)
         res = tmp
         return res, date, time

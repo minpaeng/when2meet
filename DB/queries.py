@@ -41,7 +41,19 @@ def find_group_id_from_chat_group(group_id) -> bool:
     sql = "SELECT group_id FROM chat_group where group_id=" + str(group_id) + ';'
     cursor.execute(sql)
     result = cursor.fetchall()
+
     if len(result) != 1:
+        return False
+    else:
+        return True
+
+
+def can_receive_message(group_id) -> bool:
+    sql = "SELECT is_start FROM chat_group where group_id=" + str(group_id) + ';'
+    cursor.execute(sql)
+    result = cursor.fetchall()
+    print("result: ", result[0]['is_start'])
+    if result[0]['is_start'] == 0:
         return False
     else:
         return True

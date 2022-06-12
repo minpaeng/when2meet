@@ -118,7 +118,7 @@ def done(update: Update, context: CallbackContext) -> None:
 def receive_msg(update: Update, context: CallbackContext) -> None:
     msg = update.message
     _, group_id, user_id, text, name = chat_info(msg)
-    if not queries.find_group_id_from_chat_group(group_id):
+    if not queries.can_receive_message(group_id):
         return
     queries.insert_to_message(group_id=group_id, user_id=user_id, msg=text, name=name)
 

@@ -7,4 +7,4 @@
 <br/>
 
 ## 프로젝트 구조도
-<img src="./img/structure.PNG" width="850" height="600"></img>
+<img src="./img/structure.PNG" width="850" height="550"></img>

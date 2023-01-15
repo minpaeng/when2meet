@@ -8,3 +8,6 @@
 
 ## 프로젝트 구조도
 <img src="./img/structure.PNG" width="850" height="550"></img>
+
+## 시연 영상
+🖱️영상 링크: <a href="https://youtu.be/bEjmjCk1C3E">https://youtu.be/bEjmjCk1C3E</a>
